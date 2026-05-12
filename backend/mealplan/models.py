@@ -12,24 +12,20 @@ class MealPlan(models.Model):
         return f"План {self.user.username} с {self.start_date}"
 
     def generate_shopping_list(self):
-        """
-        Логика из Практики 5.
-        Собирает все ингредиенты из всех рецептов в плане и суммирует их.
-        """
-        # Получаем все связи рецептов в этом плане
+        """Собирает ингредиенты из всех рецептов плана, суммирует по единице измерения."""
         plan_recipes = MealPlanRecipe.objects.filter(plan=self)
-        
-        # Словарь для агрегации: { 'Название (ед.изм)': количество }
-        shopping_list = {}
+        aggregated = {}  # (name, unit) -> quantity
 
         for item in plan_recipes:
-            # Берем состав каждого рецепта
-            compositions = RecipeComposition.objects.filter(recipe=item.recipe)
+            compositions = RecipeComposition.objects.filter(recipe=item.recipe).select_related('ingredient')
             for comp in compositions:
-                key = f"{comp.ingredient.name} ({comp.ingredient.unit})"
-                shopping_list[key] = shopping_list.get(key, 0) + comp.quantity
-        
-        return shopping_list
+                key = (comp.ingredient.name, comp.ingredient.unit)
+                aggregated[key] = aggregated.get(key, 0) + comp.quantity
+
+        return [
+            {'name': name, 'unit': unit, 'quantity': round(qty, 2)}
+            for (name, unit), qty in sorted(aggregated.items())
+        ]
 
 class MealPlanRecipe(models.Model):
     class MealType(models.TextChoices):
